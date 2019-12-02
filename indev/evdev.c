@@ -14,9 +14,13 @@
 #include <fcntl.h>
 #include <linux/input.h>
 
+#include "tslib.h"
+
 /*********************
  *      DEFINES
  *********************/
+
+struct tsdev *ts;
 
 /**********************
  *      TYPEDEFS
@@ -50,6 +54,7 @@ int evdev_key_val;
  */
 void evdev_init(void)
 {
+#if 0
     evdev_fd = open(EVDEV_NAME, O_RDWR | O_NOCTTY | O_NDELAY);
     if(evdev_fd == -1) {
         perror("unable open evdev interface:");
@@ -57,7 +62,13 @@ void evdev_init(void)
     }
 
     fcntl(evdev_fd, F_SETFL, O_ASYNC | O_NONBLOCK);
-
+#endif
+	ts = ts_setup(NULL, 1);
+	if(!ts) {
+		perror("ts_setup");
+		return;
+		//exit(1);
+	}
     evdev_root_x = 0;
     evdev_root_y = 0;
     evdev_key_val = 0;
@@ -97,6 +108,7 @@ bool evdev_set_file(char* dev_name)
  */
 bool evdev_read(lv_indev_drv_t * drv, lv_indev_data_t * data)
 {
+#if 0
     struct input_event in;
 
     while(read(evdev_fd, &in, sizeof(struct input_event)) > 0) {
@@ -175,7 +187,6 @@ bool evdev_read(lv_indev_drv_t * drv, lv_indev_data_t * data)
 	    }
         }
     }
-
     if(drv->type == LV_INDEV_TYPE_KEYPAD) {
         /* No data retrieved */
         data->key = evdev_key_val;
@@ -184,6 +195,33 @@ bool evdev_read(lv_indev_drv_t * drv, lv_indev_data_t * data)
     }
     if(drv->type != LV_INDEV_TYPE_POINTER)
         return false;
+#endif
+
+    // tslib
+        struct ts_sample samp;
+        int ret;
+
+    /* 修改自tslib ts_print.c */
+   
+        while (ts_read(ts, &samp, 1) == 1) {
+
+                printf("%ld.%06ld: %6d %6d %6d\n", samp.tv.tv_sec, samp.tv.tv_usec, samp.x, samp.y, samp.pressure);
+                       
+                #if EVDEV_SWAP_AXES
+                        evdev_root_x = samp.y;
+                        evdev_root_y = samp.x;
+                #else
+                        evdev_root_x = samp.x;
+                        evdev_root_y = samp.y;
+                #endif
+               
+        if(samp.pressure == 0)
+            evdev_button = LV_INDEV_STATE_REL;      //抬起
+        else if(samp.pressure == 255)
+            evdev_button = LV_INDEV_STATE_PR;
+        }
+        
+
     /*Store the collected data*/
 
 #if EVDEV_SCALE
